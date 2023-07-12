@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"metric-collector/pkg/api/kubelet"
 	"metric-collector/pkg/decode"
@@ -29,7 +28,7 @@ type MetricWorker struct {
 	KubeletClient *kubelet.KubeletClient
 }
 
-func Initmetrics(metricType bool, nodeName string) *MetricWorker {
+func Initmetrics(nodeName string) *MetricWorker {
 	// Since we are dealing with custom Collector implementations, it might
 	// be a good idea to try it out with a pedantic registry.
 	fmt.Println("Initializing metrics...")
@@ -65,15 +64,14 @@ func Initmetrics(metricType bool, nodeName string) *MetricWorker {
 			break
 		}
 	}
-	NewClusterManager(metricType, worker.KETIRegistry, clientset, worker.KubeletClient)
-	if strings.Compare(nodeName, "gpu-node1") == 0 {
-
-		http.Handle("/metric", promhttp.HandlerFor(worker.KETIRegistry, promhttp.HandlerOpts{
-			EnableOpenMetrics: true,
-		}))
-		log.Fatal(http.ListenAndServe(":9394", nil))
-	}
+	NewClusterManager(worker.KETIRegistry, clientset, worker.KubeletClient)
 	return worker
+}
+func (mw *MetricWorker) StartRestServer(nodeName string) {
+	http.Handle("/"+nodeName+"/metric", promhttp.HandlerFor(mw.KETIRegistry, promhttp.HandlerOpts{
+		EnableOpenMetrics: true,
+	}))
+	log.Fatal(http.ListenAndServe(":9394", nil))
 }
 
 type ClusterManager struct {
@@ -98,7 +96,7 @@ type NodeCollector struct {
 	KubeletClient      *kubelet.KubeletClient
 }
 
-func NewClusterManager(metricType bool, reg prometheus.Registerer, clientset *kubernetes.Clientset, kubeletClient *kubelet.KubeletClient) {
+func NewClusterManager(reg prometheus.Registerer, clientset *kubernetes.Clientset, kubeletClient *kubelet.KubeletClient) {
 	ncm := &ClusterManager{
 		MetricType: "NodeMetric",
 	}

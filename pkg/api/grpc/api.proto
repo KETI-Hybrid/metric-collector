@@ -6,7 +6,7 @@ option go_package = "metric-collector/pkg/api/grpc";
 
 import "google/protobuf/timestamp.proto";
 
-service Metric {
+service MetricGRPC {
     rpc Get(Request) returns (Response);
 
 }
