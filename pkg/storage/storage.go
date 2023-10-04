@@ -53,6 +53,12 @@ type MetricsPoint struct {
 	// Network
 	NetworkRxBytes resource.Quantity
 	NetworkTxBytes resource.Quantity
+	NetworkChange int64
+
+	// Prev Network
+	PrevNetworkRxBytes int64
+	PrevNetworkTxBytes int64
+	PrevNetworkChange  int64
 
 	// Fs
 	FsAvailableBytes resource.Quantity

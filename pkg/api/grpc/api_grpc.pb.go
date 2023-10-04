@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v4.22.2
-// source: api.proto
+// source: pkg/h_proto/api.proto
 
 package grpc
 
@@ -22,7 +22,8 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MetricGRPCClient interface {
-	Get(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
+	GetNode(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
+	GetPod(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
 }
 
 type metricGRPCClient struct {
@@ -33,9 +34,18 @@ func NewMetricGRPCClient(cc grpc.ClientConnInterface) MetricGRPCClient {
 	return &metricGRPCClient{cc}
 }
 
-func (c *metricGRPCClient) Get(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
+func (c *metricGRPCClient) GetNode(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
 	out := new(Response)
-	err := c.cc.Invoke(ctx, "/grpc.MetricGRPC/Get", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/grpc.MetricGRPC/GetNode", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metricGRPCClient) GetPod(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
+	out := new(Response)
+	err := c.cc.Invoke(ctx, "/grpc.MetricGRPC/GetPod", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +56,8 @@ func (c *metricGRPCClient) Get(ctx context.Context, in *Request, opts ...grpc.Ca
 // All implementations must embed UnimplementedMetricGRPCServer
 // for forward compatibility
 type MetricGRPCServer interface {
-	Get(context.Context, *Request) (*Response, error)
+	GetNode(context.Context, *Request) (*Response, error)
+	GetPod(context.Context, *Request) (*Response, error)
 	mustEmbedUnimplementedMetricGRPCServer()
 }
 
@@ -54,8 +65,11 @@ type MetricGRPCServer interface {
 type UnimplementedMetricGRPCServer struct {
 }
 
-func (UnimplementedMetricGRPCServer) Get(context.Context, *Request) (*Response, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
+func (UnimplementedMetricGRPCServer) GetNode(context.Context, *Request) (*Response, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetNode not implemented")
+}
+func (UnimplementedMetricGRPCServer) GetPod(context.Context, *Request) (*Response, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPod not implemented")
 }
 func (UnimplementedMetricGRPCServer) mustEmbedUnimplementedMetricGRPCServer() {}
 
@@ -70,20 +84,38 @@ func RegisterMetricGRPCServer(s grpc.ServiceRegistrar, srv MetricGRPCServer) {
 	s.RegisterService(&MetricGRPC_ServiceDesc, srv)
 }
 
-func _MetricGRPC_Get_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _MetricGRPC_GetNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Request)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MetricGRPCServer).Get(ctx, in)
+		return srv.(MetricGRPCServer).GetNode(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/grpc.MetricGRPC/Get",
+		FullMethod: "/grpc.MetricGRPC/GetNode",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MetricGRPCServer).Get(ctx, req.(*Request))
+		return srv.(MetricGRPCServer).GetNode(ctx, req.(*Request))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetricGRPC_GetPod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Request)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetricGRPCServer).GetPod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/grpc.MetricGRPC/GetPod",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetricGRPCServer).GetPod(ctx, req.(*Request))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -96,10 +128,14 @@ var MetricGRPC_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*MetricGRPCServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Get",
-			Handler:    _MetricGRPC_Get_Handler,
+			MethodName: "GetNode",
+			Handler:    _MetricGRPC_GetNode_Handler,
+		},
+		{
+			MethodName: "GetPod",
+			Handler:    _MetricGRPC_GetPod_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "api.proto",
+	Metadata: "pkg/h_proto/api.proto",
 }

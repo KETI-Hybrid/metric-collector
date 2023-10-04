@@ -14,6 +14,8 @@ func run() {
 	//isGPU := os.Getenv("IS_GPUNODE")
 	nodeName := os.Getenv("NODE_NAME")
 	workerReg := worker.Initmetrics(nodeName)
-	go workerReg.StartRestServer(nodeName)
-	collector.RunCollectorServer(workerReg.KETIRegistry)
+	// go workerReg.StartNodeServer(nodeName)
+	workerReg.KETINodeRegistry.Gather()
+	workerReg.KETIPodRegistry.Gather()
+	collector.RunCollectorServer(workerReg.KETIPodRegistry, workerReg.KETINodeRegistry)
 }

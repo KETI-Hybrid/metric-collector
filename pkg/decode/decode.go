@@ -11,24 +11,23 @@ import (
 	stats "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
-func DecodeBatch(summary *stats.Summary) (*storage.MetricsBatch, error) {
+func DecodePodBatch(summary *stats.Summary, prevPods []storage.PodMetricsPoint) (*storage.MetricsBatch, error) {
 	//fmt.Println("Func DecodeBatch Called")
 	res := &storage.MetricsBatch{
 		Node: storage.NodeMetricsPoint{},
 		Pods: make([]storage.PodMetricsPoint, len(summary.Pods)),
 	}
 
-	var errs []error
-	errs = append(errs, decodeNodeStats(&summary.Node, &res.Node)...)
-	if len(errs) != 0 {
-		// if we had errors providing node metrics, discard the data point
-		// so that we don't incorrectly report metric values as zero.
-	}
-	//fmt.Println("Node Decoding Completed")
+	errs := make([]error, 0)
 
 	num := 0
 	for _, pod := range summary.Pods {
-		podErrs := decodePodStats(&pod, &res.Pods[num])
+		var podErrs []error
+		if len(prevPods) != 0 {
+			podErrs = decodePodStats(&pod, &res.Pods[num], prevPods, num)
+		} else {
+			podErrs = decodePodStats(&pod, &res.Pods[num], nil, num)
+		}
 		errs = append(errs, podErrs...)
 		if len(podErrs) != 0 {
 			// NB: we explicitly want to discard pods with partial results, since
@@ -48,13 +47,34 @@ func DecodeBatch(summary *stats.Summary) (*storage.MetricsBatch, error) {
 	return res, utilerrors.NewAggregate(errs)
 }
 
-func decodeNodeStats(nodeStats *stats.NodeStats, target *storage.NodeMetricsPoint) []error {
+func DecodeNodeBatch(summary *stats.Summary, prevNode storage.NodeMetricsPoint) (*storage.MetricsBatch, error) {
+	//fmt.Println("Func DecodeBatch Called")
+	res := &storage.MetricsBatch{
+		Node: storage.NodeMetricsPoint{},
+		Pods: make([]storage.PodMetricsPoint, len(summary.Pods)),
+	}
+
+	var errs []error
+	errs = append(errs, decodeNodeStats(&summary.Node, &res.Node, prevNode)...)
+	if len(errs) != 0 {
+		// if we had errors providing node metrics, discard the data point
+		// so that we don't incorrectly report metric values as zero.
+	}
+	return res, utilerrors.NewAggregate(errs)
+}
+
+func decodeNodeStats(nodeStats *stats.NodeStats, target *storage.NodeMetricsPoint, prevNode storage.NodeMetricsPoint) []error {
 	//fmt.Println("Func decodeNodeStats Called")
+	// fmt.Printf("Network Time : %s\n", nodeStats.Network.Time.String())
 	timestamp, err := getScrapeTimeNode(nodeStats.CPU, nodeStats.Memory, nodeStats.Network, nodeStats.Fs)
 	if err != nil {
 		// if we can't get a timestamp, assume bad data in general
 		return []error{fmt.Errorf("unable to get valid timestamp for metric point for node %q, discarding data: %v", nodeStats.NodeName, err)}
 	}
+	prevNetworkRxBytes, _ := prevNode.MetricsPoint.NetworkRxBytes.AsInt64()
+	prevNetworkTxBytes, _ := prevNode.MetricsPoint.NetworkTxBytes.AsInt64()
+	prevNetworkChange := prevNode.MetricsPoint.NetworkChange
+	prevPrevNetworkChange := prevNode.MetricsPoint.PrevNetworkChange
 
 	*target = storage.NodeMetricsPoint{
 		Name: nodeStats.NodeName,
@@ -69,9 +89,9 @@ func decodeNodeStats(nodeStats *stats.NodeStats, target *storage.NodeMetricsPoin
 	if err := decodeMemory(&target.MetricsPoint, nodeStats.Memory); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get memory for node %q, discarding data: %v", nodeStats.NodeName, err))
 	}
-	/*if err := decodeNetwork(&target.MetricsPoint, nodeStats.Network); err != nil {
+	if err := decodeNetwork(&target.MetricsPoint, nodeStats.Network, prevNetworkRxBytes, prevNetworkTxBytes, prevNetworkChange, prevPrevNetworkChange); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get Network for node %q, discarding data: %v", nodeStats.NodeName, err))
-	}*/
+	}
 	if err := decodeFs(&target.MetricsPoint, nodeStats.Fs); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get FS for node %q, discarding data: %v", nodeStats.NodeName, err))
 	}
@@ -79,9 +99,8 @@ func decodeNodeStats(nodeStats *stats.NodeStats, target *storage.NodeMetricsPoin
 	return errs
 }
 
-func decodePodStats(podStats *stats.PodStats, target *storage.PodMetricsPoint) []error {
+func decodePodStats(podStats *stats.PodStats, target *storage.PodMetricsPoint, prevPods []storage.PodMetricsPoint, num int) []error {
 	//fmt.Println("Func decodePodStats Called")
-
 	timestamp, err := getScrapeTimePod(podStats.CPU, podStats.Memory)
 	if err != nil {
 		// if we can't get a timestamp, assume bad data in general
@@ -97,6 +116,21 @@ func decodePodStats(podStats *stats.PodStats, target *storage.PodMetricsPoint) [
 		},
 		//Containers: make([]storage.ContainerMetricsPoint, len(podStats.Containers)),
 	}
+	for i, pod := range prevPods {
+		if pod.Name == target.Name {
+			prevPods[i], prevPods[num] = prevPods[num], prevPods[i]
+		}
+	}
+	var prevNetworkRxBytes int64
+	var prevNetworkTxBytes int64
+	var prevNetworkChange int64
+	var prevPrevNetworkChange int64
+	if prevPods != nil {
+		prevNetworkRxBytes, _ = prevPods[num].MetricsPoint.NetworkRxBytes.AsInt64()
+		prevNetworkTxBytes, _ = prevPods[num].MetricsPoint.NetworkTxBytes.AsInt64()
+		prevNetworkChange = prevPods[num].MetricsPoint.NetworkChange
+		prevPrevNetworkChange = prevPods[num].MetricsPoint.PrevNetworkChange
+	}
 
 	var errs []error
 	if err := decodeCPU(&target.MetricsPoint, podStats.CPU); err != nil {
@@ -105,9 +139,9 @@ func decodePodStats(podStats *stats.PodStats, target *storage.PodMetricsPoint) [
 	if err := decodeMemory(&target.MetricsPoint, podStats.Memory); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get memory for pod %q, discarding data: %v", podStats.PodRef.Name, err))
 	}
-	/*if err := decodeNetwork(&target.MetricsPoint, podStats.Network); err != nil {
+	if err := decodeNetwork(&target.MetricsPoint, podStats.Network, prevNetworkRxBytes, prevNetworkTxBytes, prevNetworkChange, prevPrevNetworkChange); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get network RX for pod %q, discarding data: %v", podStats.PodRef.Name, err))
-	}*/
+	}
 	if err := decodeFs(&target.MetricsPoint, podStats.EphemeralStorage); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get Fs for pod %q, discarding data: %v", podStats.PodRef.Name, err))
 	}
@@ -143,7 +177,7 @@ func decodeMemory(target *storage.MetricsPoint, memStats *stats.MemoryStats) err
 
 	return nil
 }
-func decodeNetwork(target *storage.MetricsPoint, netStats *stats.NetworkStats) error {
+func decodeNetwork(target *storage.MetricsPoint, netStats *stats.NetworkStats, prevNetworkRxBytes int64, prevNetworkTxBytes int64, prevNetworkChange int64, prevPrevNetworkChange int64) error {
 	//fmt.Println("Func decodeNetwork Called")
 	if netStats == nil || len(netStats.Interfaces) != 0 && netStats.Interfaces[0].RxBytes == nil {
 		return fmt.Errorf("missing network RX usage metric")
@@ -160,6 +194,22 @@ func decodeNetwork(target *storage.MetricsPoint, netStats *stats.NetworkStats) e
 
 	target.NetworkTxBytes = *uint64Quantity(TX_Usage, 0)
 	target.NetworkTxBytes.Format = resource.BinarySI
+
+	networkRxBytes, _ := target.NetworkRxBytes.AsInt64()
+	networkTxBytes, _ := target.NetworkTxBytes.AsInt64()
+	if (networkRxBytes != prevNetworkRxBytes) || (networkTxBytes != prevNetworkTxBytes) {
+		target.NetworkChange = (networkRxBytes - prevNetworkRxBytes) + (networkTxBytes - prevNetworkTxBytes)
+		target.PrevNetworkChange = prevNetworkChange
+		if prevNetworkRxBytes == 0 {
+			target.PrevNetworkChange = target.NetworkChange
+		}
+	} else {
+		target.NetworkChange = prevNetworkChange
+		target.PrevNetworkChange = prevPrevNetworkChange
+	}
+
+	target.PrevNetworkRxBytes = prevNetworkRxBytes
+	target.PrevNetworkTxBytes = prevNetworkTxBytes
 
 	return nil
 }
