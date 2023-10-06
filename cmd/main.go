@@ -11,7 +11,6 @@ func main() {
 }
 
 func run() {
-	//isGPU := os.Getenv("IS_GPUNODE")
 	nodeName := os.Getenv("NODE_NAME")
 	workerReg := worker.Initmetrics(nodeName)
 	// go workerReg.StartNodeServer(nodeName)

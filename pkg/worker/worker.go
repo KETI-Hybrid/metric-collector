@@ -84,13 +84,20 @@ type NodeManager struct {
 	MetricType string
 }
 type NodeCollector struct {
-	ClusterManager   *NodeManager
-	HostCPUUsage     *prometheus.Desc
-	HostMemoryUsage  *prometheus.Desc
-	HostNetworkUsage *prometheus.Desc
-	HostFsUsage      *prometheus.Desc
-	ClientSet        *kubernetes.Clientset
-	KubeletClient    *kubelet.KubeletClient
+	ClusterManager      *NodeManager
+	HostCPUUsage        *prometheus.Desc
+	HostCPUQuantity     *prometheus.Desc
+	HostCPUPercent      *prometheus.Desc
+	HostMemoryUsage     *prometheus.Desc
+	HostMemoryQuantity  *prometheus.Desc
+	HostMemoryPercent   *prometheus.Desc
+	HostStoragyUsage    *prometheus.Desc
+	HostStoragyQuantity *prometheus.Desc
+	HostStoragyPercent  *prometheus.Desc
+	HostNetworkRx       *prometheus.Desc
+	HostNetworkTx       *prometheus.Desc
+	ClientSet           *kubernetes.Clientset
+	KubeletClient       *kubelet.KubeletClient
 }
 
 func NewNodeManager(reg prometheus.Registerer, clientset *kubernetes.Clientset, kubeletClient *kubelet.KubeletClient) {
@@ -101,23 +108,58 @@ func NewNodeManager(reg prometheus.Registerer, clientset *kubernetes.Clientset, 
 		ClusterManager: ncm,
 		KubeletClient:  kubeletClient,
 		HostCPUUsage: prometheus.NewDesc(
-			"Host_CPU_Core_Usage",
-			"Node CPU Usage Percent",
+			"Host_CPU_Usage",
+			"Node CPU Usage",
+			[]string{"clustername", "nodename"}, nil,
+		),
+		HostCPUQuantity: prometheus.NewDesc(
+			"Host_CPU_Quantity",
+			"Node CPU Capacity",
+			[]string{"clustername", "nodename"}, nil,
+		),
+		HostCPUPercent: prometheus.NewDesc(
+			"Host_CPU_Percent",
+			"Node CPU Usage Percentage",
 			[]string{"clustername", "nodename"}, nil,
 		),
 		HostMemoryUsage: prometheus.NewDesc(
 			"Host_Memory_Usage",
-			"Host Memory Usage percent",
+			"Host Memory Usage",
 			[]string{"clustername", "nodename"}, nil,
 		),
-		HostNetworkUsage: prometheus.NewDesc(
-			"Host_Network_Usage",
-			"Host Network Usage percent",
+		HostMemoryQuantity: prometheus.NewDesc(
+			"Host_Memory_Quantity",
+			"Node Memory Capacity",
 			[]string{"clustername", "nodename"}, nil,
 		),
-		HostFsUsage: prometheus.NewDesc(
+		HostMemoryPercent: prometheus.NewDesc(
+			"Host_Memory_Percent",
+			"Node Memory Usage Percentage",
+			[]string{"clustername", "nodename"}, nil,
+		),
+		HostStoragyUsage: prometheus.NewDesc(
 			"Host_Storage_Usage",
-			"Host Storage Usage Percent",
+			"Node Storage Usage",
+			[]string{"clustername", "nodename"}, nil,
+		),
+		HostStoragyQuantity: prometheus.NewDesc(
+			"Host_Storage_Quantity",
+			"Node Storagy Capacity",
+			[]string{"clustername", "nodename"}, nil,
+		),
+		HostStoragyPercent: prometheus.NewDesc(
+			"Host_Storage_Percent",
+			"Node Storagy Usage Percentage",
+			[]string{"clustername", "nodename"}, nil,
+		),
+		HostNetworkRx: prometheus.NewDesc(
+			"Host_Network_RX_Bytes",
+			"Node Network Reading Bytes",
+			[]string{"clustername", "nodename"}, nil,
+		),
+		HostNetworkTx: prometheus.NewDesc(
+			"Host_Network_TX_Bytes",
+			"Node Network Transmission Bytes",
 			[]string{"clustername", "nodename"}, nil,
 		),
 		ClientSet: clientset,
@@ -127,9 +169,16 @@ func NewNodeManager(reg prometheus.Registerer, clientset *kubernetes.Clientset, 
 
 func (nc NodeCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- nc.HostCPUUsage
-	ch <- nc.HostFsUsage
+	ch <- nc.HostCPUQuantity
+	ch <- nc.HostCPUPercent
 	ch <- nc.HostMemoryUsage
-	ch <- nc.HostNetworkUsage
+	ch <- nc.HostMemoryQuantity
+	ch <- nc.HostMemoryPercent
+	ch <- nc.HostStoragyUsage
+	ch <- nc.HostStoragyQuantity
+	ch <- nc.HostStoragyPercent
+	ch <- nc.HostNetworkRx
+	ch <- nc.HostNetworkTx
 }
 func (nc NodeCollector) Collect(ch chan<- prometheus.Metric) {
 	nodeName := os.Getenv("NODE_NAME")
@@ -152,36 +201,81 @@ func (nc NodeCollector) Collect(ch chan<- prometheus.Metric) {
 	clusterName := collection.ClusterName
 	nodeCores, _ := collection.Metricsbatch.Node.CPUUsageNanoCores.AsInt64()
 	nodeMemory, _ := collection.Metricsbatch.Node.MemoryUsageBytes.AsInt64()
-	nodeNetworkChange := collection.Metricsbatch.Node.NetworkChange
-	nodePrevNetworkChange := collection.Metricsbatch.Node.PrevNetworkChange
+	prevRx := collection.Metricsbatch.Node.PrevNetworkRxBytes
+	prevTx := collection.Metricsbatch.Node.PrevNetworkTxBytes
+	nodeNetworkRx, _ := collection.Metricsbatch.Node.NetworkRxBytes.AsInt64()
+	nodeNetworkRx = nodeNetworkRx - prevRx
+	nodeNetworkTx, _ := collection.Metricsbatch.Node.NetworkTxBytes.AsInt64()
+	nodeNetworkTx = nodeNetworkTx - prevTx
 	nodeStorage, _ := collection.Metricsbatch.Node.FsUsedBytes.AsInt64()
 
 	nodeCPUPercent := float64(nodeCores) / float64(totalCPU)
 	nodeMemoryPercent := float64(nodeMemory) / float64(totalMemory)
-	nodeNetworkPercent := float64(nodeNetworkChange) / float64(nodePrevNetworkChange)
 	nodeStoragePercent := float64(nodeStorage) / float64(totalStorage)
 	ch <- prometheus.MustNewConstMetric(
 		nc.HostCPUUsage,
 		prometheus.GaugeValue,
-		float64(nodeCPUPercent*100),
+		float64(nodeCores),
+		clusterName, nodeName,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		nc.HostCPUQuantity,
+		prometheus.GaugeValue,
+		float64(totalCPU),
+		clusterName, nodeName,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		nc.HostCPUPercent,
+		prometheus.GaugeValue,
+		float64(nodeCPUPercent),
 		clusterName, nodeName,
 	)
 	ch <- prometheus.MustNewConstMetric(
 		nc.HostMemoryUsage,
 		prometheus.GaugeValue,
-		float64(nodeMemoryPercent*100),
+		float64(nodeMemory),
 		clusterName, nodeName,
 	)
 	ch <- prometheus.MustNewConstMetric(
-		nc.HostNetworkUsage,
+		nc.HostMemoryQuantity,
 		prometheus.GaugeValue,
-		float64(nodeNetworkPercent*100),
+		float64(totalMemory),
 		clusterName, nodeName,
 	)
 	ch <- prometheus.MustNewConstMetric(
-		nc.HostFsUsage,
+		nc.HostMemoryPercent,
 		prometheus.GaugeValue,
-		float64(nodeStoragePercent*100),
+		float64(nodeMemoryPercent),
+		clusterName, nodeName,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		nc.HostStoragyUsage,
+		prometheus.GaugeValue,
+		float64(nodeStorage),
+		clusterName, nodeName,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		nc.HostStoragyQuantity,
+		prometheus.GaugeValue,
+		float64(totalStorage),
+		clusterName, nodeName,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		nc.HostStoragyPercent,
+		prometheus.GaugeValue,
+		float64(nodeStoragePercent),
+		clusterName, nodeName,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		nc.HostNetworkRx,
+		prometheus.GaugeValue,
+		float64(nodeNetworkRx),
+		clusterName, nodeName,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		nc.HostNetworkTx,
+		prometheus.GaugeValue,
+		float64(nodeNetworkTx),
 		clusterName, nodeName,
 	)
 
@@ -191,7 +285,7 @@ func (nc NodeCollector) Collect(ch chan<- prometheus.Metric) {
 func Scrap(kubelet_client *kubelet.KubeletClient, node *v1.Node) (*storage.Collection, error) {
 	metrics, err := CollectNode(kubelet_client, node)
 	if err != nil {
-		err = fmt.Errorf("unable to fully scrape metrics from node %s: %v", node.Name, err)
+		klog.Errorf("unable to fully scrape metrics from node %s: %v", node.Name, err)
 	}
 
 	var errs []error

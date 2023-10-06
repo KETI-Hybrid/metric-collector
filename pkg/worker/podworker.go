@@ -198,7 +198,7 @@ func (nc PodCollector) Collect(ch chan<- prometheus.Metric) {
 func PodScrap(kubelet_client *kubelet.KubeletClient, node *v1.Node) (*storage.Collection, error) {
 	metrics, err := CollectPod(kubelet_client, node)
 	if err != nil {
-		err = fmt.Errorf("unable to fully scrape metrics from node %s: %v", node.Name, err)
+		klog.Errorf("unable to fully scrape metrics from node %s: %v", node.Name, err)
 	}
 
 	var errs []error
