@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"math"
 	"metric-collector/pkg/storage"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/klog/v2"
 	stats "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
@@ -116,25 +118,36 @@ func decodePodStats(podStats *stats.PodStats, target *storage.PodMetricsPoint, p
 		},
 		//Containers: make([]storage.ContainerMetricsPoint, len(podStats.Containers)),
 	}
-	for i, pod := range prevPods {
-		if pod.Name == target.Name {
-			prevPods[i], prevPods[num] = prevPods[num], prevPods[i]
-		}
-	}
+	// klog.Infoln("current Prev Pod Len : ", len(prevPods))
+	// klog.Infoln("current Num : ", num)
+
 	var prevNetworkRxBytes int64
 	var prevNetworkTxBytes int64
 	var prevNetworkChange int64
 	var prevPrevNetworkChange int64
-	if prevPods != nil {
-		prevNetworkRxBytes, _ = prevPods[num].MetricsPoint.NetworkRxBytes.AsInt64()
-		prevNetworkTxBytes, _ = prevPods[num].MetricsPoint.NetworkTxBytes.AsInt64()
-		prevNetworkChange = prevPods[num].MetricsPoint.NetworkChange
-		prevPrevNetworkChange = prevPods[num].MetricsPoint.PrevNetworkChange
+	if num < len(prevPods) {
+		for i, pod := range prevPods {
+			if pod.Name == target.Name {
+				prevPods[i], prevPods[num] = prevPods[num], prevPods[i]
+			}
+		}
+		if prevPods != nil {
+			prevNetworkRxBytes, _ = prevPods[num].MetricsPoint.NetworkRxBytes.AsInt64()
+			prevNetworkTxBytes, _ = prevPods[num].MetricsPoint.NetworkTxBytes.AsInt64()
+			prevNetworkChange = prevPods[num].MetricsPoint.NetworkChange
+			prevPrevNetworkChange = prevPods[num].MetricsPoint.PrevNetworkChange
+		}
 	}
 
 	var errs []error
-	if err := decodeCPU(&target.MetricsPoint, podStats.CPU); err != nil {
-		errs = append(errs, fmt.Errorf("unable to get CPU for pod %q, discarding data: %v", podStats.PodRef.Name, err))
+	if strings.Contains(podStats.PodRef.Name, "-stress") {
+		if err := decodeCPUForPrint(&target.MetricsPoint, podStats.CPU, podStats.PodRef.Name); err != nil {
+			errs = append(errs, fmt.Errorf("unable to get CPU for pod %q, discarding data: %v", podStats.PodRef.Name, err))
+		}
+	} else {
+		if err := decodeCPU(&target.MetricsPoint, podStats.CPU); err != nil {
+			errs = append(errs, fmt.Errorf("unable to get CPU for pod %q, discarding data: %v", podStats.PodRef.Name, err))
+		}
 	}
 	if err := decodeMemory(&target.MetricsPoint, podStats.Memory); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get memory for pod %q, discarding data: %v", podStats.PodRef.Name, err))
@@ -155,7 +168,20 @@ func decodeCPU(target *storage.MetricsPoint, cpuStats *stats.CPUStats) error {
 		return fmt.Errorf("missing cpu usage metric")
 	}
 
-	target.CPUUsageNanoCores = *uint64Quantity(*cpuStats.UsageNanoCores, -9)
+	target.CPUUsageNanoCores = *uint64Quantity(*cpuStats.UsageNanoCores, 0)
+	return nil
+}
+
+func decodeCPUForPrint(target *storage.MetricsPoint, cpuStats *stats.CPUStats, podName string) error {
+	fmt.Println("Func decodeCPUForPrint Called")
+	if cpuStats == nil || cpuStats.UsageNanoCores == nil {
+		return fmt.Errorf("missing cpu usage metric")
+	}
+
+	klog.Infoln(*cpuStats.UsageCoreNanoSeconds)
+	klog.Infoln(*cpuStats.UsageNanoCores)
+
+	target.CPUUsageNanoCores = *uint64Quantity(*cpuStats.UsageNanoCores, 0)
 	return nil
 }
 

@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"metric-collector/pkg/api/kubelet"
+	"metric-collector/pkg/crd"
 	"metric-collector/pkg/decode"
 	"metric-collector/pkg/storage"
 
+	levelv1 "github.com/KETI-Hybrid/keti-controller/apis/level/v1"
+	keticlient "github.com/KETI-Hybrid/keti-controller/client"
 	"github.com/prometheus/client_golang/prometheus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,15 +26,21 @@ import (
 var prevNode storage.NodeMetricsPoint
 var prevPods []storage.PodMetricsPoint
 
+const (
+	Nano = 10e-9
+	Giga = 1024 * 1024 * 1024
+)
+
 type MetricWorker struct {
 	KETINodeRegistry *prometheus.Registry
 	KETIPodRegistry  *prometheus.Registry
 	KubeletClient    *kubelet.KubeletClient
+	KetiClient       *keticlient.ClientSet
+	NodeManager      *NodeCollector
+	PodManager       *PodCollector
 }
 
 func Initmetrics(nodeName string) *MetricWorker {
-	// Since we are dealing with custom Collector implementations, it might
-	// be a good idea to try it out with a pedantic registry.
 	fmt.Println("Initializing metrics...")
 
 	worker := &MetricWorker{
@@ -54,6 +64,11 @@ func Initmetrics(nodeName string) *MetricWorker {
 		fmt.Println(err.Error())
 		return nil
 	}
+	worker.KetiClient, err = crd.NewClient()
+	if err != nil {
+		fmt.Println(err.Error())
+		return nil
+	}
 	node, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil {
 		klog.Errorf("Error: %v\n", err)
@@ -65,221 +80,142 @@ func Initmetrics(nodeName string) *MetricWorker {
 			break
 		}
 	}
-	NewNodeManager(worker.KETINodeRegistry, clientset, worker.KubeletClient)
-	NewPodManager(worker.KETIPodRegistry, clientset, worker.KubeletClient)
+	worker.NodeManager = NewNodeManager(worker.KETINodeRegistry, clientset, worker.KubeletClient, worker.KetiClient)
+	worker.PodManager = NewPodManager(worker.KETIPodRegistry, clientset, worker.KubeletClient, worker.KetiClient)
 	return worker
 }
 
-// func (mw *MetricWorker) StartNodeServer(nodeName string) {
-// 	http.Handle("/nodemetric", promhttp.HandlerFor(mw.KETINodeRegistry, promhttp.HandlerOpts{
-// 		EnableOpenMetrics: true,
-// 	}))
-// 	http.Handle("/podmetric", promhttp.HandlerFor(mw.KETIPodRegistry, promhttp.HandlerOpts{
-// 		EnableOpenMetrics: true,
-// 	}))
-// 	log.Fatal(http.ListenAndServe(":9394", nil))
-// }
-
-type NodeManager struct {
-	MetricType string
-}
 type NodeCollector struct {
-	ClusterManager      *NodeManager
-	HostCPUUsage        *prometheus.Desc
-	HostCPUQuantity     *prometheus.Desc
-	HostCPUPercent      *prometheus.Desc
-	HostMemoryUsage     *prometheus.Desc
-	HostMemoryQuantity  *prometheus.Desc
-	HostMemoryPercent   *prometheus.Desc
-	HostStoragyUsage    *prometheus.Desc
-	HostStoragyQuantity *prometheus.Desc
-	HostStoragyPercent  *prometheus.Desc
-	HostNetworkRx       *prometheus.Desc
-	HostNetworkTx       *prometheus.Desc
-	ClientSet           *kubernetes.Clientset
-	KubeletClient       *kubelet.KubeletClient
+	ClientSet     *kubernetes.Clientset
+	KubeletClient *kubelet.KubeletClient
+	KetiClient    *keticlient.ClientSet
 }
 
-func NewNodeManager(reg prometheus.Registerer, clientset *kubernetes.Clientset, kubeletClient *kubelet.KubeletClient) {
-	ncm := &NodeManager{
-		MetricType: "NodeMetric",
+func NewNodeManager(reg prometheus.Registerer, clientset *kubernetes.Clientset, kubeletClient *kubelet.KubeletClient, ketiClient *keticlient.ClientSet) *NodeCollector {
+	return &NodeCollector{
+		KubeletClient: kubeletClient,
+		ClientSet:     clientset,
+		KetiClient:    ketiClient,
 	}
-	nc := NodeCollector{
-		ClusterManager: ncm,
-		KubeletClient:  kubeletClient,
-		HostCPUUsage: prometheus.NewDesc(
-			"Host_CPU_Usage",
-			"Node CPU Usage",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostCPUQuantity: prometheus.NewDesc(
-			"Host_CPU_Quantity",
-			"Node CPU Capacity",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostCPUPercent: prometheus.NewDesc(
-			"Host_CPU_Percent",
-			"Node CPU Usage Percentage",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostMemoryUsage: prometheus.NewDesc(
-			"Host_Memory_Usage",
-			"Host Memory Usage",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostMemoryQuantity: prometheus.NewDesc(
-			"Host_Memory_Quantity",
-			"Node Memory Capacity",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostMemoryPercent: prometheus.NewDesc(
-			"Host_Memory_Percent",
-			"Node Memory Usage Percentage",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostStoragyUsage: prometheus.NewDesc(
-			"Host_Storage_Usage",
-			"Node Storage Usage",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostStoragyQuantity: prometheus.NewDesc(
-			"Host_Storage_Quantity",
-			"Node Storagy Capacity",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostStoragyPercent: prometheus.NewDesc(
-			"Host_Storage_Percent",
-			"Node Storagy Usage Percentage",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostNetworkRx: prometheus.NewDesc(
-			"Host_Network_RX_Bytes",
-			"Node Network Reading Bytes",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		HostNetworkTx: prometheus.NewDesc(
-			"Host_Network_TX_Bytes",
-			"Node Network Transmission Bytes",
-			[]string{"clustername", "nodename"}, nil,
-		),
-		ClientSet: clientset,
-	}
-	prometheus.WrapRegistererWith(prometheus.Labels{"metricType": ncm.MetricType}, reg).MustRegister(nc)
 }
 
-func (nc NodeCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- nc.HostCPUUsage
-	ch <- nc.HostCPUQuantity
-	ch <- nc.HostCPUPercent
-	ch <- nc.HostMemoryUsage
-	ch <- nc.HostMemoryQuantity
-	ch <- nc.HostMemoryPercent
-	ch <- nc.HostStoragyUsage
-	ch <- nc.HostStoragyQuantity
-	ch <- nc.HostStoragyPercent
-	ch <- nc.HostNetworkRx
-	ch <- nc.HostNetworkTx
-}
-func (nc NodeCollector) Collect(ch chan<- prometheus.Metric) {
+func (nc NodeCollector) Collect() {
 	nodeName := os.Getenv("NODE_NAME")
-	node, err := nc.ClientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
-	if err != nil {
-		klog.Errorln(err)
+	for {
+		node, err := nc.ClientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+		if err != nil {
+			klog.Errorln(err)
+		}
+		currentNodeMetric := &levelv1.NodeMetric{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "NodeMetric",
+				APIVersion: "level.hybrid.keti/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: node.Name,
+			},
+		}
+		createFlag := false
+		getCurrentNodeMetric, err := nc.KetiClient.LevelV1().NodeMetrics().Get(nodeName, metav1.GetOptions{})
+		if err != nil {
+			klog.Errorln(err)
+		}
+		if len(getCurrentNodeMetric.Name) == 0 {
+			createFlag = true
+		} else {
+			createFlag = false
+			currentNodeMetric = getCurrentNodeMetric
+		}
+		totalCPUQuantity := node.Status.Capacity["cpu"]
+		totalCPU, _ := totalCPUQuantity.AsInt64()
+		totalMemoryQuantity := node.Status.Capacity["memory"]
+		totalMemory, _ := totalMemoryQuantity.AsInt64()
+		totalStorageQuantity := node.Status.Capacity["ephemeral-storage"]
+		totalStorage, _ := totalStorageQuantity.AsInt64()
+
+		collection, err := Scrap(nc.KubeletClient, node)
+		if err != nil {
+			klog.Errorln(err)
+		}
+		clusterName := collection.ClusterName
+		nodeCores, _ := collection.Metricsbatch.Node.CPUUsageNanoCores.AsInt64()
+		nodeMemory, _ := collection.Metricsbatch.Node.MemoryUsageBytes.AsInt64()
+		prevRx := collection.Metricsbatch.Node.PrevNetworkRxBytes
+		prevTx := collection.Metricsbatch.Node.PrevNetworkTxBytes
+		nodeNetworkRx, _ := collection.Metricsbatch.Node.NetworkRxBytes.AsInt64()
+		nodeNetworkRx = nodeNetworkRx - prevRx
+		nodeNetworkTx, _ := collection.Metricsbatch.Node.NetworkTxBytes.AsInt64()
+		nodeNetworkTx = nodeNetworkTx - prevTx
+		nodeStorage, _ := collection.Metricsbatch.Node.FsUsedBytes.AsInt64()
+
+		nodeCPUPercent := (float64(nodeCores) * Nano) / float64(totalCPU)
+		nodeMemoryPercent := float64(nodeMemory) / float64(totalMemory)
+		nodeStoragePercent := float64(nodeStorage) / float64(totalStorage)
+
+		fmt.Println("Node core usage : ", (float64(nodeCores)*Nano)/40)
+		fmt.Println("Node core capacity : ", totalCPU)
+
+		currentNodeMetric.Spec.HostCPUUsage.Value = fmt.Sprintf("%.2f", ((float64(nodeCores) * 10e-9) / 40))
+		currentNodeMetric.Spec.HostCPUUsage.ClusterName = clusterName
+		currentNodeMetric.Spec.HostCPUUsage.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostCPUQuantity.Value = fmt.Sprintf("%.2f", float64(totalCPU))
+		currentNodeMetric.Spec.HostCPUQuantity.ClusterName = clusterName
+		currentNodeMetric.Spec.HostCPUQuantity.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostCPUPercent.Value = fmt.Sprintf("%.2f", (float64(nodeCPUPercent) * 100))
+		currentNodeMetric.Spec.HostCPUPercent.ClusterName = clusterName
+		currentNodeMetric.Spec.HostCPUPercent.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostMemoryUsage.Value = fmt.Sprintf("%.2f", (float64(nodeMemory) / Giga))
+		currentNodeMetric.Spec.HostMemoryUsage.ClusterName = clusterName
+		currentNodeMetric.Spec.HostMemoryUsage.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostMemoryQuantity.Value = fmt.Sprintf("%.2f", (float64(totalMemory) / Giga))
+		currentNodeMetric.Spec.HostMemoryQuantity.ClusterName = clusterName
+		currentNodeMetric.Spec.HostMemoryQuantity.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostMemoryPercent.Value = fmt.Sprintf("%.2f", (float64(nodeMemoryPercent) * 100))
+		currentNodeMetric.Spec.HostMemoryPercent.ClusterName = clusterName
+		currentNodeMetric.Spec.HostMemoryPercent.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostStoragyUsage.Value = fmt.Sprintf("%.2f", (float64(totalStorage) / Giga))
+		currentNodeMetric.Spec.HostStoragyUsage.ClusterName = clusterName
+		currentNodeMetric.Spec.HostStoragyUsage.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostStoragyPercent.Value = fmt.Sprintf("%.2f", (float64(nodeStoragePercent) * 100))
+		currentNodeMetric.Spec.HostStoragyPercent.ClusterName = clusterName
+		currentNodeMetric.Spec.HostStoragyPercent.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostNetworkRx.Value = fmt.Sprintf("%.2f", float64(nodeNetworkRx))
+		currentNodeMetric.Spec.HostNetworkRx.ClusterName = clusterName
+		currentNodeMetric.Spec.HostNetworkRx.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostNetworkTx.Value = fmt.Sprintf("%.2f", float64(nodeNetworkTx))
+		currentNodeMetric.Spec.HostNetworkTx.ClusterName = clusterName
+		currentNodeMetric.Spec.HostNetworkTx.NodeName = nodeName
+
+		prevNode = collection.Metricsbatch.Node
+
+		if currentNodeMetric.Labels == nil {
+			currentNodeMetric.Labels = make(map[string]string)
+		}
+
+		currentNodeMetric.Labels["lastCollectTime"] = time.Now().Format("2006-01-02_15_04_05.0000")
+
+		if createFlag {
+			_, err = nc.KetiClient.LevelV1().NodeMetrics().Create(currentNodeMetric)
+			if err != nil {
+				klog.Errorln(err)
+			}
+		} else {
+			_, err = nc.KetiClient.LevelV1().NodeMetrics().Update(currentNodeMetric)
+			if err != nil {
+				klog.Errorln(err)
+			}
+		}
+		time.Sleep(time.Second * 5)
 	}
-
-	totalCPUQuantity := node.Status.Allocatable["cpu"]
-	totalCPU, _ := totalCPUQuantity.AsInt64()
-	totalMemoryQuantity := node.Status.Allocatable["memory"]
-	totalMemory, _ := totalMemoryQuantity.AsInt64()
-	totalStorageQuantity := node.Status.Allocatable["ephemeral-storage"]
-	totalStorage, _ := totalStorageQuantity.AsInt64()
-
-	collection, err := Scrap(nc.KubeletClient, node)
-	if err != nil {
-		klog.Errorln(err)
-	}
-	clusterName := collection.ClusterName
-	nodeCores, _ := collection.Metricsbatch.Node.CPUUsageNanoCores.AsInt64()
-	nodeMemory, _ := collection.Metricsbatch.Node.MemoryUsageBytes.AsInt64()
-	prevRx := collection.Metricsbatch.Node.PrevNetworkRxBytes
-	prevTx := collection.Metricsbatch.Node.PrevNetworkTxBytes
-	nodeNetworkRx, _ := collection.Metricsbatch.Node.NetworkRxBytes.AsInt64()
-	nodeNetworkRx = nodeNetworkRx - prevRx
-	nodeNetworkTx, _ := collection.Metricsbatch.Node.NetworkTxBytes.AsInt64()
-	nodeNetworkTx = nodeNetworkTx - prevTx
-	nodeStorage, _ := collection.Metricsbatch.Node.FsUsedBytes.AsInt64()
-
-	nodeCPUPercent := float64(nodeCores) / float64(totalCPU)
-	nodeMemoryPercent := float64(nodeMemory) / float64(totalMemory)
-	nodeStoragePercent := float64(nodeStorage) / float64(totalStorage)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostCPUUsage,
-		prometheus.GaugeValue,
-		float64(nodeCores),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostCPUQuantity,
-		prometheus.GaugeValue,
-		float64(totalCPU),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostCPUPercent,
-		prometheus.GaugeValue,
-		float64(nodeCPUPercent),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostMemoryUsage,
-		prometheus.GaugeValue,
-		float64(nodeMemory),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostMemoryQuantity,
-		prometheus.GaugeValue,
-		float64(totalMemory),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostMemoryPercent,
-		prometheus.GaugeValue,
-		float64(nodeMemoryPercent),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostStoragyUsage,
-		prometheus.GaugeValue,
-		float64(nodeStorage),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostStoragyQuantity,
-		prometheus.GaugeValue,
-		float64(totalStorage),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostStoragyPercent,
-		prometheus.GaugeValue,
-		float64(nodeStoragePercent),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostNetworkRx,
-		prometheus.GaugeValue,
-		float64(nodeNetworkRx),
-		clusterName, nodeName,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		nc.HostNetworkTx,
-		prometheus.GaugeValue,
-		float64(nodeNetworkTx),
-		clusterName, nodeName,
-	)
-
-	prevNode = collection.Metricsbatch.Node
 }
 
 func Scrap(kubelet_client *kubelet.KubeletClient, node *v1.Node) (*storage.Collection, error) {

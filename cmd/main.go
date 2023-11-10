@@ -1,7 +1,8 @@
 package main
 
 import (
-	"metric-collector/pkg/collector"
+	"metric-collector/pkg/housekeeping"
+	"metric-collector/pkg/image"
 	"metric-collector/pkg/worker"
 	"os"
 )
@@ -13,8 +14,12 @@ func main() {
 func run() {
 	nodeName := os.Getenv("NODE_NAME")
 	workerReg := worker.Initmetrics(nodeName)
-	// go workerReg.StartNodeServer(nodeName)
-	workerReg.KETINodeRegistry.Gather()
-	workerReg.KETIPodRegistry.Gather()
-	collector.RunCollectorServer(workerReg.KETIPodRegistry, workerReg.KETINodeRegistry)
+	hk := housekeeping.NewHouseKeeper(workerReg.KetiClient, workerReg.NodeManager.ClientSet)
+	im := image.NewImageManager(workerReg.KetiClient, workerReg.NodeManager.ClientSet, nodeName)
+	go im.ImageWatcher()
+	go hk.NodeKeeping()
+	go hk.PodKeeping()
+	go workerReg.PodManager.Collect()
+	workerReg.NodeManager.Collect()
+
 }

@@ -26,5 +26,5 @@
 
 
 
-kubectl create -f /root/workspace/pjh/dev/metric-collector/deploy
+kubectl create -f /root/workspace/hth/dev/metric-collector/deploy
 
