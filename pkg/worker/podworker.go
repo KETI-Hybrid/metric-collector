@@ -38,6 +38,7 @@ func (nc PodCollector) Collect() {
 	for {
 		nodeName := os.Getenv("NODE_NAME")
 		node, err := nc.ClientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+		
 		if err != nil {
 			klog.Errorln(err)
 		}
@@ -83,8 +84,10 @@ func (nc PodCollector) Collect() {
 					Labels: make(map[string]string),
 				},
 			}
+			
 			createFlag := false
 			getCurrentPodMetric, err := nc.KetiClient.LevelV1().PodMetrics().Get(podMetric.Name, metav1.GetOptions{})
+			
 			if err != nil {
 				klog.Errorln(err)
 			}
@@ -159,6 +162,7 @@ func (nc PodCollector) Collect() {
 			}
 
 		}
+		
 		prevPods = collection.Metricsbatch.Pods
 		time.Sleep(time.Second * 5)
 	}
@@ -167,6 +171,7 @@ func (nc PodCollector) Collect() {
 
 func PodScrap(kubelet_client *kubelet.KubeletClient, node *v1.Node) (*storage.Collection, error) {
 	metrics, err := CollectPod(kubelet_client, node)
+	
 	if err != nil {
 		klog.Errorf("unable to fully scrape metrics from node %s: %v", node.Name, err)
 	}
@@ -182,6 +187,7 @@ func PodScrap(kubelet_client *kubelet.KubeletClient, node *v1.Node) (*storage.Co
 
 func CollectPod(kubelet_client *kubelet.KubeletClient, node *v1.Node) (*storage.MetricsBatch, error) {
 	summary, err := kubelet_client.GetSummary()
+	
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch metrics from Kubelet %s (%s): %v", node.Name, node.Status.Addresses[0].Address, err)
 	}
