@@ -31,6 +31,7 @@ func DecodePodBatch(summary *stats.Summary, prevPods []storage.PodMetricsPoint) 
 			podErrs = decodePodStats(&pod, &res.Pods[num], nil, num)
 		}
 		errs = append(errs, podErrs...)
+		
 		if len(podErrs) != 0 {
 			// NB: we explicitly want to discard pods with partial results, since
 			// the horizontal pod autoscaler takes special action when a pod is missing
@@ -50,14 +51,15 @@ func DecodePodBatch(summary *stats.Summary, prevPods []storage.PodMetricsPoint) 
 }
 
 func DecodeNodeBatch(summary *stats.Summary, prevNode storage.NodeMetricsPoint) (*storage.MetricsBatch, error) {
-	//fmt.Println("Func DecodeBatch Called")
 	res := &storage.MetricsBatch{
 		Node: storage.NodeMetricsPoint{},
 		Pods: make([]storage.PodMetricsPoint, len(summary.Pods)),
 	}
 
 	var errs []error
+	
 	errs = append(errs, decodeNodeStats(&summary.Node, &res.Node, prevNode)...)
+	
 	if len(errs) != 0 {
 		// if we had errors providing node metrics, discard the data point
 		// so that we don't incorrectly report metric values as zero.
@@ -69,10 +71,12 @@ func decodeNodeStats(nodeStats *stats.NodeStats, target *storage.NodeMetricsPoin
 	//fmt.Println("Func decodeNodeStats Called")
 	// fmt.Printf("Network Time : %s\n", nodeStats.Network.Time.String())
 	timestamp, err := getScrapeTimeNode(nodeStats.CPU, nodeStats.Memory, nodeStats.Network, nodeStats.Fs)
+	
 	if err != nil {
 		// if we can't get a timestamp, assume bad data in general
 		return []error{fmt.Errorf("unable to get valid timestamp for metric point for node %q, discarding data: %v", nodeStats.NodeName, err)}
 	}
+	
 	prevNetworkRxBytes, _ := prevNode.MetricsPoint.NetworkRxBytes.AsInt64()
 	prevNetworkTxBytes, _ := prevNode.MetricsPoint.NetworkTxBytes.AsInt64()
 	prevNetworkChange := prevNode.MetricsPoint.NetworkChange
@@ -84,7 +88,9 @@ func decodeNodeStats(nodeStats *stats.NodeStats, target *storage.NodeMetricsPoin
 			Timestamp: timestamp,
 		},
 	}
+	
 	var errs []error
+	
 	if err := decodeCPU(&target.MetricsPoint, nodeStats.CPU); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get CPU for node %q, discarding data: %v", nodeStats.NodeName, err))
 	}
