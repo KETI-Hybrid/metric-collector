@@ -12,6 +12,7 @@ func main() {
 }
 
 func run() {
+	
 	nodeName := os.Getenv("NODE_NAME")
 	workerReg := worker.Initmetrics(nodeName)
 	hk := housekeeping.NewHouseKeeper(workerReg.KetiClient, workerReg.NodeManager.ClientSet)
