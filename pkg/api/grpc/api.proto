@@ -18,8 +18,6 @@ message Response {
   map<string, MetricFamily> message = 1;
 }
 
-
-
 message LabelPair {
     optional string name  = 1;
     optional string value = 2;
@@ -57,7 +55,6 @@ message Quantile {
 message Summary {
   optional uint64   sample_count = 1;
   optional double   sample_sum   = 2;
-  repeated Quantile quantile     = 3;
 }
 
 message Untyped {
@@ -79,7 +76,6 @@ message Histogram {
   // then each power of two is divided into 2^n logarithmic buckets.
   // Or in other words, each bucket boundary is the previous boundary times 2^(2^-n).
   // In the future, more bucket schemas may be added using numbers < -4 or > 8.
-  optional sint32 schema           = 5;
   optional double zero_threshold   = 6; // Breadth of the zero bucket.
   optional uint64 zero_count       = 7; // Count in zero bucket.
   optional double zero_count_float = 8; // Overrides sb_zero_count if > 0.
