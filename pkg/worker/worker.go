@@ -159,42 +159,6 @@ func (nc NodeCollector) Collect() {
 		currentNodeMetric.Spec.HostCPUUsage.ClusterName = clusterName
 		currentNodeMetric.Spec.HostCPUUsage.NodeName = nodeName
 
-		currentNodeMetric.Spec.HostCPUQuantity.Value = fmt.Sprintf("%.2f", float64(totalCPU))
-		currentNodeMetric.Spec.HostCPUQuantity.ClusterName = clusterName
-		currentNodeMetric.Spec.HostCPUQuantity.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostCPUPercent.Value = fmt.Sprintf("%.2f", (float64(nodeCPUPercent) * 100))
-		currentNodeMetric.Spec.HostCPUPercent.ClusterName = clusterName
-		currentNodeMetric.Spec.HostCPUPercent.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostMemoryUsage.Value = fmt.Sprintf("%.2f", (float64(nodeMemory) / Giga))
-		currentNodeMetric.Spec.HostMemoryUsage.ClusterName = clusterName
-		currentNodeMetric.Spec.HostMemoryUsage.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostMemoryQuantity.Value = fmt.Sprintf("%.2f", (float64(totalMemory) / Giga))
-		currentNodeMetric.Spec.HostMemoryQuantity.ClusterName = clusterName
-		currentNodeMetric.Spec.HostMemoryQuantity.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostMemoryPercent.Value = fmt.Sprintf("%.2f", (float64(nodeMemoryPercent) * 100))
-		currentNodeMetric.Spec.HostMemoryPercent.ClusterName = clusterName
-		currentNodeMetric.Spec.HostMemoryPercent.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostStoragyUsage.Value = fmt.Sprintf("%.2f", (float64(totalStorage) / Giga))
-		currentNodeMetric.Spec.HostStoragyUsage.ClusterName = clusterName
-		currentNodeMetric.Spec.HostStoragyUsage.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostStoragyPercent.Value = fmt.Sprintf("%.2f", (float64(nodeStoragePercent) * 100))
-		currentNodeMetric.Spec.HostStoragyPercent.ClusterName = clusterName
-		currentNodeMetric.Spec.HostStoragyPercent.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostNetworkRx.Value = fmt.Sprintf("%.2f", float64(nodeNetworkRx))
-		currentNodeMetric.Spec.HostNetworkRx.ClusterName = clusterName
-		currentNodeMetric.Spec.HostNetworkRx.NodeName = nodeName
-
-		currentNodeMetric.Spec.HostNetworkTx.Value = fmt.Sprintf("%.2f", float64(nodeNetworkTx))
-		currentNodeMetric.Spec.HostNetworkTx.ClusterName = clusterName
-		currentNodeMetric.Spec.HostNetworkTx.NodeName = nodeName
-
 		prevNode = collection.Metricsbatch.Node
 
 		if currentNodeMetric.Labels == nil {
