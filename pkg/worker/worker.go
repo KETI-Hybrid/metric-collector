@@ -179,6 +179,14 @@ func (nc NodeCollector) Collect() {
 		currentNodeMetric.Spec.HostMemoryPercent.ClusterName = clusterName
 		currentNodeMetric.Spec.HostMemoryPercent.NodeName = nodeName
 
+		currentNodeMetric.Spec.HostStoragyUsage.Value = fmt.Sprintf("%.2f", (float64(totalStorage) / Giga))
+		currentNodeMetric.Spec.HostStoragyUsage.ClusterName = clusterName
+		currentNodeMetric.Spec.HostStoragyUsage.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostStoragyPercent.Value = fmt.Sprintf("%.2f", (float64(nodeStoragePercent) * 100))
+		currentNodeMetric.Spec.HostStoragyPercent.ClusterName = clusterName
+		currentNodeMetric.Spec.HostStoragyPercent.NodeName = nodeName
+
 		prevNode = collection.Metricsbatch.Node
 
 		if currentNodeMetric.Labels == nil {
