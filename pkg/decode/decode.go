@@ -245,6 +245,24 @@ func decodeFs(target *storage.MetricsPoint, FsStats *stats.FsStats) error {
 
 	target.FsUsedBytes.Format = resource.BinarySI
 
+	var prevNetworkRxBytes int64
+	var prevNetworkTxBytes int64
+	var prevNetworkChange int64
+	var prevPrevNetworkChange int64
+	if num < len(prevPods) {
+		for i, pod := range prevPods {
+			if pod.Name == target.Name {
+				prevPods[i], prevPods[num] = prevPods[num], prevPods[i]
+			}
+		}
+		if prevPods != nil {
+			prevNetworkRxBytes, _ = prevPods[num].MetricsPoint.NetworkRxBytes.AsInt64()
+			prevNetworkTxBytes, _ = prevPods[num].MetricsPoint.NetworkTxBytes.AsInt64()
+			prevNetworkChange = prevPods[num].MetricsPoint.NetworkChange
+			prevPrevNetworkChange = prevPods[num].MetricsPoint.PrevNetworkChange
+		}
+	}
+
 	return nil
 }
 func getScrapeTimePod(cpu *stats.CPUStats, memory *stats.MemoryStats) (time.Time, error) {
