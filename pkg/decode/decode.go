@@ -88,15 +88,7 @@ func decodeNodeStats(nodeStats *stats.NodeStats, target *storage.NodeMetricsPoin
 	if err := decodeCPU(&target.MetricsPoint, nodeStats.CPU); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get CPU for node %q, discarding data: %v", nodeStats.NodeName, err))
 	}
-	if err := decodeMemory(&target.MetricsPoint, nodeStats.Memory); err != nil {
-		errs = append(errs, fmt.Errorf("unable to get memory for node %q, discarding data: %v", nodeStats.NodeName, err))
-	}
-	if err := decodeNetwork(&target.MetricsPoint, nodeStats.Network, prevNetworkRxBytes, prevNetworkTxBytes, prevNetworkChange, prevPrevNetworkChange); err != nil {
-		errs = append(errs, fmt.Errorf("unable to get Network for node %q, discarding data: %v", nodeStats.NodeName, err))
-	}
-	if err := decodeFs(&target.MetricsPoint, nodeStats.Fs); err != nil {
-		errs = append(errs, fmt.Errorf("unable to get FS for node %q, discarding data: %v", nodeStats.NodeName, err))
-	}
+
 
 	return errs
 }
@@ -121,23 +113,7 @@ func decodePodStats(podStats *stats.PodStats, target *storage.PodMetricsPoint, p
 	// klog.Infoln("current Prev Pod Len : ", len(prevPods))
 	// klog.Infoln("current Num : ", num)
 
-	var prevNetworkRxBytes int64
-	var prevNetworkTxBytes int64
-	var prevNetworkChange int64
-	var prevPrevNetworkChange int64
-	if num < len(prevPods) {
-		for i, pod := range prevPods {
-			if pod.Name == target.Name {
-				prevPods[i], prevPods[num] = prevPods[num], prevPods[i]
-			}
-		}
-		if prevPods != nil {
-			prevNetworkRxBytes, _ = prevPods[num].MetricsPoint.NetworkRxBytes.AsInt64()
-			prevNetworkTxBytes, _ = prevPods[num].MetricsPoint.NetworkTxBytes.AsInt64()
-			prevNetworkChange = prevPods[num].MetricsPoint.NetworkChange
-			prevPrevNetworkChange = prevPods[num].MetricsPoint.PrevNetworkChange
-		}
-	}
+
 
 	var errs []error
 	if strings.Contains(podStats.PodRef.Name, "-stress") {
