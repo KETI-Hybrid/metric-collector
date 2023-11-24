@@ -115,21 +115,6 @@ func (nc PodCollector) Collect() {
 			currentPodMetric.Spec.MemoryGauge.PodNamespace = podMetric.Namespace
 			currentPodMetric.Spec.MemoryGauge.PodName = podMetric.Name
 
-			currentPodMetric.Spec.NetworkRXCounter.Value = fmt.Sprintf("%.2f", float64(networkrxUsage))
-			currentPodMetric.Spec.NetworkRXCounter.ClusterName = clusterName
-			currentPodMetric.Spec.NetworkRXCounter.PodNamespace = podMetric.Namespace
-			currentPodMetric.Spec.NetworkRXCounter.PodName = podMetric.Name
-
-			currentPodMetric.Spec.NetworkTXCounter.Value = fmt.Sprintf("%.2f", float64(networktxUsage))
-			currentPodMetric.Spec.NetworkTXCounter.ClusterName = clusterName
-			currentPodMetric.Spec.NetworkTXCounter.PodNamespace = podMetric.Namespace
-			currentPodMetric.Spec.NetworkTXCounter.PodName = podMetric.Name
-
-			currentPodMetric.Spec.NetworkGauge.Value = fmt.Sprintf("%.2f", float64(totalStorage))
-			currentPodMetric.Spec.NetworkGauge.ClusterName = clusterName
-			currentPodMetric.Spec.NetworkGauge.PodNamespace = podMetric.Namespace
-			currentPodMetric.Spec.NetworkGauge.PodName = podMetric.Name
-
 			currentPodMetric.Spec.StorageCounter.Value = fmt.Sprintf("%.2f", (float64(storageUsage) / Giga))
 			currentPodMetric.Spec.StorageCounter.ClusterName = clusterName
 			currentPodMetric.Spec.StorageCounter.PodNamespace = podMetric.Namespace
