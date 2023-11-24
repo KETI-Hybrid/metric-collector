@@ -159,6 +159,11 @@ func (nc NodeCollector) Collect() {
 		currentNodeMetric.Spec.HostCPUUsage.ClusterName = clusterName
 		currentNodeMetric.Spec.HostCPUUsage.NodeName = nodeName
 
+		currentNodeMetric.Spec.HostCPUQuantity.Value = fmt.Sprintf("%.2f", float64(totalCPU))
+		currentNodeMetric.Spec.HostCPUQuantity.ClusterName = clusterName
+		currentNodeMetric.Spec.HostCPUQuantity.NodeName = nodeName
+
+
 		prevNode = collection.Metricsbatch.Node
 
 		if currentNodeMetric.Labels == nil {
