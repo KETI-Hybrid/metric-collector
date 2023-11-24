@@ -133,6 +133,10 @@ func (nc NodeCollector) Collect() {
 		totalStorageQuantity := node.Status.Capacity["ephemeral-storage"]
 		totalStorage, _ := totalStorageQuantity.AsInt64()
 
+		if totalCPUQuantity == 0 {
+			fmt.Println("Metric parse error")
+		}
+
 		collection, err := Scrap(nc.KubeletClient, node)
 		if err != nil {
 			klog.Errorln(err)
@@ -230,6 +234,8 @@ func Scrap(kubelet_client *kubelet.KubeletClient, node *v1.Node) (*storage.Colle
 		Metricsbatch: metrics,
 		ClusterName:  os.Getenv("CLUSTER_NAME"),
 	}
+
+	fmt.Println(errs)
 	return res, utilerrors.NewAggregate(errs)
 }
 
