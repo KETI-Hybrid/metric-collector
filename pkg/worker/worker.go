@@ -163,6 +163,21 @@ func (nc NodeCollector) Collect() {
 		currentNodeMetric.Spec.HostCPUQuantity.ClusterName = clusterName
 		currentNodeMetric.Spec.HostCPUQuantity.NodeName = nodeName
 
+		currentNodeMetric.Spec.HostCPUPercent.Value = fmt.Sprintf("%.2f", (float64(nodeCPUPercent) * 100))
+		currentNodeMetric.Spec.HostCPUPercent.ClusterName = clusterName
+		currentNodeMetric.Spec.HostCPUPercent.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostMemoryUsage.Value = fmt.Sprintf("%.2f", (float64(nodeMemory) / Giga))
+		currentNodeMetric.Spec.HostMemoryUsage.ClusterName = clusterName
+		currentNodeMetric.Spec.HostMemoryUsage.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostMemoryQuantity.Value = fmt.Sprintf("%.2f", (float64(totalMemory) / Giga))
+		currentNodeMetric.Spec.HostMemoryQuantity.ClusterName = clusterName
+		currentNodeMetric.Spec.HostMemoryQuantity.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostMemoryPercent.Value = fmt.Sprintf("%.2f", (float64(nodeMemoryPercent) * 100))
+		currentNodeMetric.Spec.HostMemoryPercent.ClusterName = clusterName
+		currentNodeMetric.Spec.HostMemoryPercent.NodeName = nodeName
 
 		prevNode = collection.Metricsbatch.Node
 
