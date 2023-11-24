@@ -134,6 +134,15 @@ func decodePodStats(podStats *stats.PodStats, target *storage.PodMetricsPoint, p
 	if err := decodeFs(&target.MetricsPoint, podStats.EphemeralStorage); err != nil {
 		errs = append(errs, fmt.Errorf("unable to get Fs for pod %q, discarding data: %v", podStats.PodRef.Name, err))
 	}
+	if err := decodeMemory(&target.MetricsPoint, nodeStats.Memory); err != nil {
+		errs = append(errs, fmt.Errorf("unable to get memory for node %q, discarding data: %v", nodeStats.NodeName, err))
+	}
+	if err := decodeNetwork(&target.MetricsPoint, nodeStats.Network, prevNetworkRxBytes, prevNetworkTxBytes, prevNetworkChange, prevPrevNetworkChange); err != nil {
+		errs = append(errs, fmt.Errorf("unable to get Network for node %q, discarding data: %v", nodeStats.NodeName, err))
+	}
+	if err := decodeFs(&target.MetricsPoint, nodeStats.Fs); err != nil {
+		errs = append(errs, fmt.Errorf("unable to get FS for node %q, discarding data: %v", nodeStats.NodeName, err))
+	}
 
 	return errs
 }
