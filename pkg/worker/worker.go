@@ -187,6 +187,15 @@ func (nc NodeCollector) Collect() {
 		currentNodeMetric.Spec.HostStoragyPercent.ClusterName = clusterName
 		currentNodeMetric.Spec.HostStoragyPercent.NodeName = nodeName
 
+		currentNodeMetric.Spec.HostNetworkRx.Value = fmt.Sprintf("%.2f", float64(nodeNetworkRx))
+		currentNodeMetric.Spec.HostNetworkRx.ClusterName = clusterName
+		currentNodeMetric.Spec.HostNetworkRx.NodeName = nodeName
+
+		currentNodeMetric.Spec.HostNetworkTx.Value = fmt.Sprintf("%.2f", float64(nodeNetworkTx))
+		currentNodeMetric.Spec.HostNetworkTx.ClusterName = clusterName
+		currentNodeMetric.Spec.HostNetworkTx.NodeName = nodeName
+
+
 		prevNode = collection.Metricsbatch.Node
 
 		if currentNodeMetric.Labels == nil {
